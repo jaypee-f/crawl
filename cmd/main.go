@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 )
 
 // TODO
 // Add concurrency will need it later
-// Deal with links we've already seen
-// Deal with relative links
+// Split into packages and testing
 
 func main() {
 	fmt.Println("let's crawl")
@@ -21,26 +23,58 @@ func main() {
 	}
 
 	linksQueue := make(chan string)
+	seenLinks := make(chan string)
 
 	go func() {
 		linksQueue <- os.Args[1]
 	}()
+	go filterLinks(linksQueue, seenLinks)
 
-	for link := range linksQueue {
-		ConsumeLinksQueue(link, linksQueue)
+	for url := range seenLinks {
+		ConsumeLinksQueue(url, linksQueue)
+	}
+
+}
+
+func filterLinks(allLinks chan string, unSeenLinks chan string) {
+	var crawled = make(map[string]time.Time)
+	for link := range allLinks {
+		_, ok := crawled[link]
+		if !ok {
+			crawled[link] = time.Now()
+			unSeenLinks <- link
+		} else {
+			fmt.Println("SEEN", link)
+		}
 	}
 }
 
 func ConsumeLinksQueue(url string, queue chan string) {
-	for _, link := range GetLinksFromUrl(url) {
-		if link != "" {
-			fmt.Println(link)
+	links := GetLinksFromUrl(url)
+	for i := range links {
+		if links[i] != "" {
+			link := filterLink(links[i], url)
+			//fmt.Println(link)
 			go func() { queue <- link }()
 		}
 	}
 }
 
+func GetLinksFromUrl(url string) []string {
+	r, err := http.Get(url)
+
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	return getLinks(r.Body)
+}
+
 func getLinks(body io.ReadCloser) []string {
+	defer func() {
+		body.Close()
+	}()
+
 	t := html.NewTokenizer(body)
 	links := make([]string, 0)
 
@@ -58,21 +92,6 @@ func getLinks(body io.ReadCloser) []string {
 			}
 		}
 	}
-
-}
-
-func GetLinksFromUrl(url string) []string {
-	r, err := http.Get(url)
-	defer func() {
-		if r != nil {
-			r.Body.Close()
-		}
-	}()
-	if err != nil {
-		fmt.Println(err)
-		return nil
-	}
-	return getLinks(r.Body)
 }
 
 func getLink(t html.Token) string {
@@ -82,4 +101,20 @@ func getLink(t html.Token) string {
 		}
 	}
 	return ""
+}
+
+func filterLink(link, page string) string {
+	// remove hash
+	l := strings.Split(link, "#")
+
+	uri, err := url.Parse(l[0])
+	if err != nil {
+		return ""
+	}
+	pageUrl, err := url.Parse(page)
+	if err != nil {
+		return ""
+	}
+	return pageUrl.ResolveReference(uri).String()
+
 }
