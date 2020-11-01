@@ -2,11 +2,17 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/net/html"
 	"io"
 	"net/http"
 	"os"
+
+	"golang.org/x/net/html"
 )
+
+// TODO
+// Add concurrency will need it later
+// Deal with links we've already seen
+// Deal with relative links
 
 func main() {
 	fmt.Println("let's crawl")
@@ -14,16 +20,29 @@ func main() {
 		fmt.Println("provide a url to crawl")
 	}
 
+	linksQueue := make(chan string)
 
-	links := GetLinksFromUrl(os.Args[1])
-	if links != nil {
-		fmt.Println(links)
+	go func() {
+		linksQueue <- os.Args[1]
+	}()
+
+	for link := range linksQueue {
+		ConsumeLinksQueue(link, linksQueue)
 	}
 }
 
-func getLinks(body io.ReadCloser) []string{
+func ConsumeLinksQueue(url string, queue chan string) {
+	for _, link := range GetLinksFromUrl(url) {
+		if link != "" {
+			fmt.Println(link)
+			go func() { queue <- link }()
+		}
+	}
+}
+
+func getLinks(body io.ReadCloser) []string {
 	t := html.NewTokenizer(body)
-	links := make([]string,0)
+	links := make([]string, 0)
 
 	for {
 		switch t.Next() {
@@ -35,17 +54,16 @@ func getLinks(body io.ReadCloser) []string{
 		case html.StartTagToken:
 			link := getLink(t.Token())
 			if link != "" {
-				links = append(links,link)
+				links = append(links, link)
 			}
 		}
 	}
 
-
 }
 
-func GetLinksFromUrl(url string)  []string {
+func GetLinksFromUrl(url string) []string {
 	r, err := http.Get(url)
-	defer func () {
+	defer func() {
 		if r != nil {
 			r.Body.Close()
 		}
