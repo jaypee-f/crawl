@@ -9,6 +9,8 @@ import (
 	"github.com/jaypee-f/crawler/internal/fetching"
 )
 
+const maxWait = time.Second * 2
+
 type Crawler struct {
 	base        string
 	links       chan string
@@ -30,8 +32,10 @@ func (c *Crawler) Start() {
 	}()
 
 	go c.dedupeLinks(done)
-	go c.crawl()
 
+	for i := 0; i < 3; i++ {
+		go c.crawl()
+	}
 	<-done
 }
 
@@ -52,7 +56,7 @@ func (c *Crawler) crawl() {
 func (c *Crawler) dedupeLinks(done chan bool) {
 	var crawled = make(map[string]time.Time)
 
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(maxWait)
 
 	for {
 		select {
@@ -61,7 +65,7 @@ func (c *Crawler) dedupeLinks(done chan bool) {
 				close(c.unSeenLinks)
 				return
 			}
-			timer.Reset(10 * time.Second)
+			timer.Reset(maxWait)
 			_, ok = crawled[link]
 			if !ok {
 				crawled[link] = time.Now()
