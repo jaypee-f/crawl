@@ -10,51 +10,82 @@ import (
 )
 
 type Crawler struct {
-	base string
+	base        string
+	links       chan string
+	unSeenLinks chan string
 }
 
 func New(base string) *Crawler {
-	return &Crawler{base: base}
+	return &Crawler{
+		base:        base,
+		links:       make(chan string, 5),
+		unSeenLinks: make(chan string, 5),
+	}
 }
 
 func (c *Crawler) Start() {
-	linksQueue := make(chan string)
-	seenLinks := make(chan string)
+	done := make(chan bool)
 	go func() {
-		linksQueue <- c.base
+		c.links <- c.base
 	}()
-	go c.filterLinks(linksQueue, seenLinks)
 
-	for url := range seenLinks {
-		c.consumeLinksQueue(url, linksQueue)
-	}
+	go c.dedupeLinks(done)
+	go c.crawl()
+
+	<-done
 }
 
-func (c *Crawler) filterLinks(allLinks chan string, unSeenLinks chan string) {
-	var crawled = make(map[string]time.Time)
-	for link := range allLinks {
-		_, ok := crawled[link]
-		if !ok {
-			crawled[link] = time.Now()
-			fmt.Println(link)
-			unSeenLinks <- link
+func (c *Crawler) crawl() {
+	for {
+		select {
+		case link, ok := <-c.unSeenLinks:
+			if !ok {
+				fmt.Println("consumer quits")
+				return
+			}
+			c.consumeLinks(link)
+		default:
 		}
 	}
 }
 
-func (c *Crawler) consumeLinksQueue(url string, queue chan string) {
+func (c *Crawler) dedupeLinks(done chan bool) {
+	var crawled = make(map[string]time.Time)
+
+	timer := time.NewTimer(10 * time.Second)
+
+	for {
+		select {
+		case link, ok := <-c.links:
+			if !ok {
+				close(c.unSeenLinks)
+				return
+			}
+			timer.Reset(10 * time.Second)
+			_, ok = crawled[link]
+			if !ok {
+				crawled[link] = time.Now()
+				fmt.Println(link, " crawled at", crawled[link].Format(time.Kitchen))
+				c.unSeenLinks <- link
+			}
+		case <-timer.C:
+			fmt.Println("Done")
+			done <- true
+		}
+	}
+}
+
+func (c *Crawler) consumeLinks(url string) {
 	links := fetching.GetLinksFromUrl(url)
 	for i := range links {
-		link := c.filterLink(links[i], url)
+		link := c.santiseLink(links[i], url)
 		if link != "" {
-			go func() { queue <- link }()
+			go func() { c.links <- link }()
 		}
 	}
 }
 
-func (c *Crawler) filterLink(link, page string) string {
-	// Is it one of ours?
-
+func (c *Crawler) santiseLink(link, page string) string {
 	// remove hash
 	l := strings.Split(link, "#")
 
@@ -68,6 +99,7 @@ func (c *Crawler) filterLink(link, page string) string {
 	}
 	link = pageUrl.ResolveReference(uri).String()
 
+	// Is it one of ours?
 	if !strings.HasPrefix(link, c.base) {
 		return ""
 	}
