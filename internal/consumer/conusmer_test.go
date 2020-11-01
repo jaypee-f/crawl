@@ -8,7 +8,7 @@ import (
 
 func TestCrawler_Start(t *testing.T) {
 	//	c := Crawler{}
-	//c.Start()
+	// c.Start()
 }
 
 func TestCrawler_dedupeLinks(t *testing.T) {
@@ -32,7 +32,6 @@ func TestCrawler_dedupeLinks(t *testing.T) {
 }
 
 func TestCrawler_sanitiseLink(t *testing.T) {
-
 	type test struct {
 		name   string
 		base   string

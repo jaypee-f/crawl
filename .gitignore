@@ -1,0 +1,12 @@
+
+
+/vendor/
+.idea/
+
+# Coverage files
+cover.out
+coverage.out
+
+# macOS
+.DS_Store
+

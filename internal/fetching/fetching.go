@@ -10,7 +10,6 @@ import (
 
 func GetLinksFromUrl(url string) []string {
 	r, err := http.Get(url)
-
 	if err != nil {
 		fmt.Println(err)
 		return nil

@@ -9,7 +9,7 @@ import (
 	"github.com/jaypee-f/crawler/internal/fetching"
 )
 
-const maxWait = time.Second * 2
+const maxWait = time.Second * 5
 
 type Crawler struct {
 	base        string
@@ -54,7 +54,7 @@ func (c *Crawler) crawl() {
 }
 
 func (c *Crawler) dedupeLinks(done chan bool) {
-	var crawled = make(map[string]time.Time)
+	crawled := make(map[string]time.Time)
 
 	timer := time.NewTimer(maxWait)
 
@@ -69,7 +69,6 @@ func (c *Crawler) dedupeLinks(done chan bool) {
 			_, ok = crawled[link]
 			if !ok {
 				crawled[link] = time.Now()
-				fmt.Println(link, " crawled at", crawled[link].Format(time.Kitchen))
 				c.unSeenLinks <- link
 			}
 		case <-timer.C:
@@ -81,12 +80,26 @@ func (c *Crawler) dedupeLinks(done chan bool) {
 
 func (c *Crawler) consumeLinks(url string) {
 	links := fetching.GetLinksFromUrl(url)
+	pageMap := make(map[string]bool)
 	for i := range links {
 		link := c.santiseLink(links[i], url)
 		if link != "" {
+			pageMap[link] = true
 			go func() { c.links <- link }()
 		}
 	}
+
+	displayPageLinks(url, pageMap)
+}
+
+func displayPageLinks(url string, links map[string]bool) {
+	page := make([]string, 0)
+	page = append(page, url)
+
+	for link := range links {
+		page = append(page, fmt.Sprint("\t", link))
+	}
+	fmt.Print(strings.Join(page, "\n"), "\n")
 }
 
 func (c *Crawler) santiseLink(link, page string) string {

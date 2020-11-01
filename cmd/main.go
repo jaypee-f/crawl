@@ -7,10 +7,6 @@ import (
 	"github.com/jaypee-f/crawler/internal/consumer"
 )
 
-// TODO
-// Add concurrency will need it later
-// Split into packages and testing
-
 func main() {
 	fmt.Println("let's crawl")
 	if len(os.Args) < 2 {
